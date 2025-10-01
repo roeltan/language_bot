@@ -48,10 +48,12 @@ class Chatbot:
 
 class FlashcardHelper(Chatbot):
     # Constructor
-    def __init__(self, target_language, user_id, channel):
-        super().__init__(target_language, user_id, channel, 2)
+    def __init__(self, target_language, user_id, channel, memory_length, difficulty, custom_instruction):
+        super().__init__(target_language, user_id, channel, memory_length)
         self.flashcard_top: str = ""
         self.flashcard_bottom: str = ""
+        self.difficulty = difficulty
+        self.custom_instruction = custom_instruction
 
         # Store list of keys for flashcards
         self.curr_deck_keys = list(flashcards.decks[target_language].keys())
@@ -74,6 +76,28 @@ class FlashcardHelper(Chatbot):
         The user has been shown a flashcard which shows the word/phrase \"{self.flashcard_top}\" in English, and the user is to reply with a message indicating what they believe it is in \"{self.target_language}\".
         The answer is \"{self.flashcard_bottom}\". Print \"Correct,comment\" or \"Wrong,comment\" without quotes only, depending on whether the user got the flashcard correct. 
         The comment is to aid the user's learning, and is to be very brief and primarily in English.""")
+
+        # TODO add difficulties for flashcards
+        # easy: one flashcard at a time (balance of known and unknown words)
+        # medium: one flashcard at a time (more unknown words)
+        # hard: two flashcards at a time, with asking to make sentence that use both flashcards
+        difficulty_settings = {
+            "easy" : {
+                "question_count": 1,
+                "prompt": "The chosen difficulty is \"Easy\"."
+            },
+            "medium": {
+                "question_count": 1,
+                "prompt": "The chosen difficulty is \"Medium\""
+            },
+            "hard": {
+                "question_count": 2,
+                "prompt": "The chosen difficulty is \"Hard\""
+            },
+        }
+
+        if self.custom_instruction:
+            system_prompt += f"\n The user also requests the following: {self.custom_instruction}"
         user_prompt = f"\"{attempt}\""
 
         response = ai.responses.create(
@@ -85,7 +109,7 @@ class FlashcardHelper(Chatbot):
             {"role": "system", "content": base_prompt + " " + system_prompt},
             {"role": "user", "content": user_prompt},
         ])
-        
+         
         result = response.output_text
          
         # Parse output
@@ -103,9 +127,10 @@ class FlashcardHelper(Chatbot):
 
 class TranslationHelper(Chatbot):
     # Constructor
-    def __init__(self, target_language, user_id, channel, memory_length, difficulty):
-        super().__init__(target_language, user_id, channel, 10)
+    def __init__(self, target_language, user_id, channel, memory_length, difficulty, custom_instruction):
+        super().__init__(target_language, user_id, channel, memory_length)
         self.difficulty = difficulty
+        self.custom_instruction = custom_instruction
         
     async def start_practice(self):
         # TODO integrate flashcard weakpoints into difficulty setting
@@ -113,46 +138,65 @@ class TranslationHelper(Chatbot):
         # TODO allow user to choose the kind of practice that they want
         # can be done with a natural language prompt
         difficulty_settings = {
-            "easy": {"exercise_count": 6, "prompt": "Each exercise is to be one short and simple sentence, using simple grammatical structures."},
-            "medium": {"exercise_count": 4, "prompt": "Each exercise is to be two sentences long, utilising varied grammatical structures."},
-            "hard": {"exercise_count": 2, "prompt": "Each exercise is to be a few sentences long. The exercises are diffcult, testing varied and complex grammatical structures. Prompt the user to also add in their own ideas based on exercise context, and provide appropriate feedback after."}
+            "easy": {
+                "exercise_count": 6, 
+                "prompt": "The chosen difficulty is \"Easy\". Each exercise is to be one short and simple sentence."
+            },
+            "medium": {
+                "exercise_count": 4, 
+                "prompt": "The chosen difficulty is \"Medium\". Each exercise is to be two sentences long. The sentences are all related and combine two different grammatical structures."
+            },
+            "hard": {
+                "exercise_count": 2, 
+                "prompt": "The chosen difficulty is \"Hard\". Each exercise is to be a three sentences long. The sentences are all related, and combine varied and complex grammatical structures. Prompt the user to also add in their own ideas based on exercise context."
+            }
         }
         system_prompt = textwrap.dedent(f"""You are currently in the Discord channel for translation practice. 
-        You are to generate a numbered list of exercises for the user to translate from English to {self.target_language}.
+        Generate a numbered list of exercises for the user to translate from English to {self.target_language}.
         When giving the exercises, limit extra commentary. Following a user's attempt, provide insightful feedback, and generate new exercises when all have been attempted.
-        {difficulty_settings[self.difficulty]["prompt"]}""")
+        There are three difficulty settings, "Easy", "Medium" and "Hard". {difficulty_settings[self.difficulty]["prompt"]}""")        
+        if self.custom_instruction:
+            system_prompt += f"\n The user also requests the following: {self.custom_instruction}"
         user_prompt = f"Could you create me a list of {difficulty_settings[self.difficulty]["exercise_count"]} exercises?"
         self.history.append({"role":"system", "content":base_prompt + " " + system_prompt})
+        
         await self.send_response(user_prompt)
+
+    def find_difficulty():
+        # difficulty =
+        # return difficulty # TODO
+        pass
 
 class ConversationHelper(Chatbot):
     # Constructor
     def __init__(self, target_language, user_id, channel, memory_length, difficulty):
-        super().__init__(target_language, user_id, channel, 20)
+        super().__init__(target_language, user_id, channel, memory_length)
         self.difficulty = difficulty
-        
-    # async def start_practice(self):
-    #     # TODO integrate flashcard weakpoints into difficulty setting
-    #     # TODO allow user to select difficulty level
-    #     # TODO allow user to choose the kind of practice that they want - conversation topic
-    #     # can be done with a natural language prompt
-    #     difficulty_settings = {
-    #         "easy": {"exercise_count": 6, "prompt": "Each exercise is to be one short and simple sentence, using simple grammatical structures."},
-    #         "medium": {"exercise_count": 4, "prompt": "Each exercise is to be two sentences long, utilising varied grammatical structures."},
-    #         "hard": {"exercise_count": 2, "prompt": "Each exercise is to be a few sentences long. The exercises are diffcult, testing varied and complex grammatical structures. Prompt the user to also add in their own ideas based on exercise context, and provide appropriate feedback after."}
-    #     }
-    #     system_prompt = textwrap.dedent(f"""You are currently in the Discord channel for conversation practice. 
-    #     You are to generate a numbered list of exercises for the user to translate from English to {self.target_language}.
-    #     When giving the exercises, limit extra commentary. Following a user's attempt, provide insightful feedback, and generate new exercises when all have been attempted.
-    #     {difficulty_settings[self.difficulty]["prompt"]}""")
-    #     user_prompt = f"Could you create me a list of {difficulty_settings[self.difficulty]["exercise_count"]} exercises?"
-    #     self.history.append({"role":"system", "content":base_prompt + " " + system_prompt})
-    #     await self.send_response(user_prompt)
+
+    async def start_practice(self):
+        # TODO allow user to select difficulty level
+        # TODO allow user to choose the kind of practice that they want - conversation topic
+        # can be done with a natural language prompt
+        difficulty_settings = {
+            "easy": {"prompt": "Each exercise is to be one short and simple sentence, using simple grammatical structures."},
+            "medium": {"prompt": "Each exercise is to be two sentences long, utilising varied grammatical structures."},
+            "hard": {"exercise_count": 2, "prompt": "Each exercise is to be a few sentences long. The exercises are diffcult, testing varied and complex grammatical structures. Prompt the user to also add in their own ideas based on exercise context, and provide appropriate feedback after."}
+        }
+        system_prompt = textwrap.dedent(f"""You are currently in the Discord channel for conversation practice. 
+        You are to have a conversation with the user in {self.target_language}. Provide feedback on the user's reponse.
+        The user may give their own conversation topic. {difficulty_settings[self.difficulty]["prompt"]}""")
+        user_prompt = f"Could you create me a list of {difficulty_settings[self.difficulty]["exercise_count"]} exercises?"
+        self.history.append({"role":"system", "content":base_prompt + " " + system_prompt})
+        await self.send_response(user_prompt)
+
+    def find_difficulty(self):
+        pass # TODO
 
 class CompositionHelper(Chatbot):
     pass # TODO
 
 # Implement class for flashcard helper per language per user
+# TODO combine into one big dictionary
 flashcard_helpers: dict[str, dict[str, FlashcardHelper]] = {language: dict() for language in languages}
 translation_helpers: dict[str, dict[str, TranslationHelper]] = {language: dict() for language in languages}
 conversation_helpers: dict[str, dict[str, ConversationHelper]] = {language: dict() for language in languages}
